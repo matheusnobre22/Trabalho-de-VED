@@ -1,0 +1,136 @@
+---
+title: "Análise do PIB per capita dos municípios do estado de São Paulo"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: row
+    vertical_layout: fill
+    theme: journal
+    runtime: shiny    
+---
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(gapminder)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(readr)
+library(shiny)
+library(leaflet)
+library(RColorBrewer)
+library(rgdal)
+library(lubridate)
+library(readxl)
+shp <- rgdal::readOGR("geojs-35-mun.json")
+dfsp <- read_excel('tabelamedia.xlsx')
+dfshp <- merge(shp, dfsp, by.x = "id", by.y = "Codigo_Municipio", duplicateGeoms=TRUE)
+dfshp <- dfshp[dfshp$Ano == 2002,]
+```
+
+Visualização no Mapa
+==================================
+---
+
+### Mapa de SP (Média do PIB per capita no período de 2002-2018)
+
+```{r}
+pal <- colorBin("Reds",domain = dfshp$MediaPIB_percapita,n=5)
+cities_popup <- paste0("<strong>Município: </strong>", 
+                       dfshp$Municipio, 
+                        "<br><strong>PIB: </strong>", 
+                       dfshp$PIB,
+                        "<br><strong>PIB per capita (média): </strong>", 
+                       dfshp$MediaPIB_percapita,
+                        "<br><strong>Industria: </strong>", 
+                       dfshp$Industria, 
+                        "<br><strong>Servicos: </strong>", 
+                       dfshp$Servicos,
+                        "<br><strong>Agropecuaria: </strong>", 
+                       dfshp$Agropecuaria,
+                        "<br><strong>Impostos: </strong>", 
+                       dfshp$Impostos)
+leaflet(dfshp) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(fillColor = ~pal(dfshp$MediaPIB_percapita), 
+              fillOpacity = 0.8, 
+              color = "#EB6864", 
+              weight = 1, 
+              popup = cities_popup) %>%
+  addLegend("bottomright", pal = pal, values = ~MediaPIB_percapita,
+            title = "PIB per capita dos municípios de São Paulo (média do período 2002-2018)",
+            opacity = 0.8, layerId = "colorLegend")  
+
+```
+
+Gráficos e Dados
+==================================
+
+Inputs {.sidebar}
+----------------------------------
+```{r} 
+      selectInput("Municipio", label = "Município:",
+            choices=unique(dfsp$Municipio))
+      sliderInput("Ano", label = "Período:",
+            min = 2002, max = 2018, value = 2018, step = 2)
+```
+
+Row {data-height=350}
+-----------------------------------------------------------------------
+
+### PIB
+
+```{r}
+renderPlotly({
+g=filter(dfsp, Municipio == input$Municipio, Ano <= input$Ano) %>%
+    ggplot(., aes(x=Ano, y=(PIB/1000000)))+geom_line(color = "black")+
+      theme_bw()+labs(y= "PIB bilhões R$")
+    ggplotly(g)
+})
+```
+
+### PIB per capita
+
+```{r}
+renderPlotly({
+g=filter(dfsp, Municipio == input$Municipio, Ano <= input$Ano) %>%
+    ggplot(., aes(x=Ano, y=(PIB_percapita/1000)))+geom_line(color = "#EB6864")+
+      theme_bw()+labs(y= "PIB per capita milhares R$")
+    ggplotly(g)
+})
+```
+
+Row {.tabset}
+---
+
+### População
+
+```{r}
+renderPlotly({
+g=filter(dfsp, Municipio == input$Municipio, Ano <= input$Ano) %>%
+    ggplot(., aes(x=Ano, y=Populacao*1000))+geom_col(fill="#EB6864", color = "#EB6864")+
+      theme_bw()+labs(y= "População")
+    ggplotly(g)
+})
+```
+
+### Dados do município
+
+```{r}
+
+renderTable({
+  filter(dfsp, Municipio == input$Municipio)
+})
+```
+
+(+)
+===
+```{r}
+renderPlotly({
+    ggplot(dfsp, aes(x=Impostos, y=PIB_percapita/1000))+geom_point(col = "#EB6864")+
+      theme_bw()+
+      scale_x_log10()+labs(title="Gráfico de dispersão", y= "PIB per capita em milhares R$",x= "Impostos R$ (log10)")
+  })
+```
+
+
+
+
